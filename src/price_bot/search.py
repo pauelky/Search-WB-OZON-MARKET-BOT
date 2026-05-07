@@ -11,7 +11,7 @@ class PriceSearchService:
     def __init__(self, config: Config):
         self.config = config
         self.http = HttpClient(timeout_seconds=config.http_timeout_seconds)
-        self.extractor = ProductQueryExtractor(self.http)
+        self.extractor = ProductQueryExtractor(self.http, wb_dest=config.wb_dest)
         self.providers = build_default_providers(self.http, config)
 
     def search_from_text(self, text: str) -> PriceSearchResult:
@@ -61,6 +61,8 @@ def rank_candidates(candidates: list[ProductCandidate], limit: int) -> list[Prod
         key=lambda item: (
             item.price_rub is None,
             item.price_rub or 0,
+            -(item.rating or 0),
+            -(item.reviews_count or 0),
             -item.confidence,
             item.marketplace,
         )

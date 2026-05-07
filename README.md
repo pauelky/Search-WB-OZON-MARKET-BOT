@@ -7,15 +7,18 @@ Telegram bot MVP: send a product link or product name, and the bot looks for che
 - Accepts a marketplace product link or a plain query.
 - Extracts a readable product name from URL metadata or URL slug.
 - Searches configured marketplace providers.
-- Sorts candidates by price when a price is available.
+- Shows price, availability signal, rating, and review/count signals when available.
+- Sorts candidates by price and uses rating/review data as a tie-breaker.
+- Supports watch mode for price/rating/review changes.
 - Falls back to marketplace search links when public pages/API responses are blocked.
 
 ## Important note
 
 Marketplace public pages often use anti-bot protection and can change without notice. This MVP is built with replaceable providers:
 
-- Wildberries provider tries a public catalog endpoint first.
-- Ozon and Yandex Market are searched through lightweight web-search snippets and fallback search URLs.
+- Wildberries provider tries public catalog/card endpoints first.
+- Yandex Market is parsed from its public search page when the server IP is allowed.
+- Ozon is searched through lightweight web-search snippets and fallback search URLs.
 - Later you can plug in official partner/seller APIs where you have legal access and tokens.
 
 ## Run as Telegram bot
@@ -88,7 +91,23 @@ python -m price_bot "https://www.ozon.ru/product/..."
 ## Commands
 
 - `/start` or `/help` - show help.
-- Send a link or product name - compare prices.
+- `/status` - show provider status and watch interval.
+- `/watch <product or link>` - monitor price, rating, and reviews.
+- `/watchlist` - show active watches.
+- `/unwatch <id>` - remove a watch.
+- Send a link or product name - compare prices, ratings, and reviews.
+
+## Watch Mode
+
+The bot stores watches in `data/watches.json`, which is ignored by git. It checks active watches every `WATCH_INTERVAL_MINUTES` minutes.
+
+Useful `.env` settings:
+
+```env
+WATCH_INTERVAL_MINUTES=360
+WATCH_FILE=data/watches.json
+MARKET_PRICE_LIMIT=8
+```
 
 ## Tests
 

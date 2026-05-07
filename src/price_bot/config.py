@@ -22,6 +22,8 @@ class Config:
     market_price_limit: int = 8
     http_timeout_seconds: int = 14
     wb_dest: str = "-1257786"
+    watch_interval_minutes: int = 360
+    watch_file: str = "data/watches.json"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -32,6 +34,8 @@ class Config:
             market_price_limit=_int_env("MARKET_PRICE_LIMIT", 8),
             http_timeout_seconds=_int_env("HTTP_TIMEOUT_SECONDS", 14),
             wb_dest=os.getenv("WB_DEST", "-1257786"),
+            watch_interval_minutes=_int_env("WATCH_INTERVAL_MINUTES", 360),
+            watch_file=os.getenv("WATCH_FILE", "data/watches.json"),
         )
 
 

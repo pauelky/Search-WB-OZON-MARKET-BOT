@@ -82,7 +82,7 @@ class WildberriesProvider(MarketplaceProvider):
         if payload is None:
             return MarketplaceSearch(
                 self.marketplace,
-                warning=f"Wildberries public search недоступен ({'; '.join(errors)}).",
+                warning="Wildberries временно ограничил автоматический поиск. Попробуй повторить позже.",
             )
 
         products = _wb_products_from_payload(payload)
@@ -201,6 +201,8 @@ def _wb_candidate_from_item(
         marketplace=marketplace,
         title=title,
         price_rub=price,
+        rating=_wb_rating(item),
+        reviews_count=_wb_reviews_count(item),
         url=f"https://www.wildberries.ru/catalog/{nm_id}/detail.aspx",
         available=available,
         confidence=min(1.0, 0.35 + score),
@@ -238,6 +240,22 @@ def _wb_price(item: dict[str, object]) -> int | None:
     return None
 
 
+def _wb_rating(item: dict[str, object]) -> float | None:
+    for key in ("reviewRating", "nmReviewRating", "rating"):
+        value = item.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return round(float(value), 1)
+    return None
+
+
+def _wb_reviews_count(item: dict[str, object]) -> int | None:
+    for key in ("feedbacks", "nmFeedbacks", "feedbackPoints"):
+        value = item.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return int(value)
+    return None
+
+
 @dataclass(frozen=True)
 class MarketplaceSearchConfig:
     name: str
@@ -261,7 +279,7 @@ class YandexMarketProvider(MarketplaceProvider):
             return MarketplaceSearch(
                 self.marketplace,
                 candidates=[self._fallback_candidate(query)],
-                warning=f"Яндекс Маркет: поиск недоступен ({exc}).",
+                warning=f"Яндекс Маркет ограничил автоматический поиск ({exc}).",
             )
 
         candidates = self._parse_cards(response.text, query, limit)
@@ -313,6 +331,8 @@ class YandexMarketProvider(MarketplaceProvider):
 
             visible_text = strip_tags(block)
             price = _yandex_market_price(visible_text)
+            rating = _yandex_market_rating(visible_text)
+            reviews_count = _yandex_market_reviews_count(visible_text)
             seen_urls.add(clean_url)
             candidates.append(
                 ProductCandidate(
@@ -320,6 +340,8 @@ class YandexMarketProvider(MarketplaceProvider):
                     title=title,
                     url=clean_url,
                     price_rub=price,
+                    rating=rating,
+                    reviews_count=reviews_count,
                     available=None if price is None else True,
                     confidence=min(1.0, 0.4 + score),
                     note="market search page",
@@ -363,6 +385,34 @@ def _yandex_market_price(text: str) -> int | None:
     return None
 
 
+def _yandex_market_rating(text: str) -> float | None:
+    patterns = (
+        r"Рейтинг товара:\s*([0-5](?:[,.]\d)?)\s*из\s*5",
+        r"\b([0-5](?:[,.]\d)?)\s*\([^)]*\)\s*·",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        value = float(match.group(1).replace(",", "."))
+        if 0 < value <= 5:
+            return round(value, 1)
+    return None
+
+
+def _yandex_market_reviews_count(text: str) -> int | None:
+    patterns = (
+        r"Оценок:\s*\(([\d\s\u00a0]+)\)",
+        r"\(([0-9\s\u00a0]+)\)\s*·\s*\d+\s*купил",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        return int(re.sub(r"[^\d]", "", match.group(1)))
+    return None
+
+
 def _parse_price_number(raw: str) -> int:
     return int(re.sub(r"[^\d]", "", raw))
 
@@ -384,7 +434,7 @@ class DuckDuckGoMarketplaceProvider(MarketplaceProvider):
             return MarketplaceSearch(
                 self.marketplace,
                 candidates=[fallback],
-                warning=f"{self.marketplace}: web search недоступен ({exc}).",
+                warning=f"{self.marketplace}: автоматический поиск временно недоступен ({exc}).",
             )
 
         candidates = self._parse_results(response.text, query, limit)
@@ -436,6 +486,8 @@ class DuckDuckGoMarketplaceProvider(MarketplaceProvider):
                     title=title,
                     url=real_url,
                     price_rub=price,
+                    rating=_snippet_rating(f"{title} {snippet}"),
+                    reviews_count=_snippet_reviews_count(f"{title} {snippet}"),
                     available=None if price is None else True,
                     confidence=min(1.0, 0.25 + score),
                     note="web-search snippet" if price else "search result without parsed price",
@@ -478,6 +530,21 @@ class DuckDuckGoMarketplaceProvider(MarketplaceProvider):
             confidence=0.0,
             note="fallback search link",
         )
+
+
+def _snippet_rating(text: str) -> float | None:
+    match = re.search(r"\b([0-5](?:[,.]\d)?)\s*(?:из\s*5|/5|★)", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    value = float(match.group(1).replace(",", "."))
+    return round(value, 1) if 0 < value <= 5 else None
+
+
+def _snippet_reviews_count(text: str) -> int | None:
+    match = re.search(r"([\d\s\u00a0]+)\s*(?:отзыв|оцен)", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return int(re.sub(r"[^\d]", "", match.group(1)))
 
 
 def build_default_providers(http: HttpClient, config: Config) -> list[MarketplaceProvider]:
