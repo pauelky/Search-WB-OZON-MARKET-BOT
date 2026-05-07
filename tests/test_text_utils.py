@@ -4,6 +4,7 @@ import unittest
 
 from price_bot.text_utils import (
     clean_product_title,
+    condition_matches,
     duckduckgo_real_url,
     extract_prices_rub,
     has_required_model_phrases,
@@ -47,6 +48,10 @@ class TextUtilsTest(unittest.TestCase):
     def test_has_required_model_phrases(self) -> None:
         self.assertTrue(has_required_model_phrases("iphone 17 pro max", "Apple iPhone 17 Pro Max"))
         self.assertFalse(has_required_model_phrases("iphone 17 pro max", "Apple iPhone 17 Pro без RU-STORE/MAX"))
+
+    def test_condition_matches(self) -> None:
+        self.assertFalse(condition_matches("iphone 15 128gb black", "iPhone 15 128 ГБ Восстановленный"))
+        self.assertTrue(condition_matches("iphone 15 восстановленный", "iPhone 15 128 ГБ Восстановленный"))
 
 
 if __name__ == "__main__":

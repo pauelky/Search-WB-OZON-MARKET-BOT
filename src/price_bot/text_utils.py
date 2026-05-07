@@ -150,10 +150,31 @@ def has_required_model_phrases(query: str, title: str) -> bool:
     return True
 
 
+def condition_matches(query: str, title: str) -> bool:
+    if _mentions_used_or_refurbished(query):
+        return True
+    return not _mentions_used_or_refurbished(title)
+
+
 def _phrase_norm(value: str) -> str:
     value = value.lower()
     value = re.sub(r"[^a-zа-я0-9]+", " ", value)
     return " ".join(value.split())
+
+
+def _mentions_used_or_refurbished(value: str) -> bool:
+    normalized = _phrase_norm(value)
+    markers = (
+        "восстановлен",
+        "refurbished",
+        "renewed",
+        "уценка",
+        "уцененный",
+        "уценённый",
+        "б у",
+        "бу",
+    )
+    return any(marker in normalized for marker in markers)
 
 
 def extract_prices_rub(text: str) -> list[int]:

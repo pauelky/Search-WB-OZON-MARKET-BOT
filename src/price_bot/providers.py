@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from dataclasses import dataclass
 from urllib.parse import quote, urlencode, urljoin, urlparse
 from urllib.parse import parse_qsl
@@ -10,6 +11,7 @@ from .http_client import FetchError, HttpClient
 from .models import MarketplaceSearch, ProductCandidate
 from .text_utils import (
     clean_product_title,
+    condition_matches,
     duckduckgo_real_url,
     extract_prices_rub,
     has_required_model_phrases,
@@ -36,7 +38,6 @@ class WildberriesProvider(MarketplaceProvider):
 
     def search(self, query: str, limit: int) -> MarketplaceSearch:
         params = {
-            "ab_testing": "false",
             "appType": "1",
             "curr": "rub",
             "dest": self.config.wb_dest,
@@ -47,19 +48,39 @@ class WildberriesProvider(MarketplaceProvider):
             "suppressSpellcheck": "false",
             "page": "1",
         }
-        url = "https://search.wb.ru/exactmatch/ru/common/v13/search?" + urlencode(params)
         headers = {
             "Accept": "application/json",
-            "User-Agent": "Wildberries/6.6.0 (iPhone; iOS 17.0)",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/121.0.0.0 Safari/537.36"
+            ),
             "x-userid": "0",
-            "x-queryid": "market-price-bot",
+            "x-queryid": uuid.uuid4().hex,
         }
-        try:
-            payload = self.http.get_json(url, headers=headers)
-        except FetchError as exc:
+        payload = None
+        errors: list[str] = []
+        endpoints = (
+            ("common", "v5"),
+            ("female", "v5"),
+            ("male", "v5"),
+            ("common", "v13"),
+        )
+        for segment, version in endpoints:
+            headers["x-queryid"] = uuid.uuid4().hex
+            url = f"https://search.wb.ru/exactmatch/ru/{segment}/{version}/search?" + urlencode(params)
+            try:
+                payload = self.http.get_json(url, headers=headers)
+            except FetchError as exc:
+                errors.append(f"{segment}/{version}: {exc}")
+                continue
+            if _wb_products_from_payload(payload):
+                break
+
+        if payload is None:
             return MarketplaceSearch(
                 self.marketplace,
-                warning=f"Wildberries public search недоступен ({exc}).",
+                warning=f"Wildberries public search недоступен ({'; '.join(errors)}).",
             )
 
         products = _wb_products_from_payload(payload)
@@ -158,7 +179,11 @@ def _wb_candidate_from_item(
 
     price = _wb_price(item)
     score = token_overlap_score(query, title) if query else 1.0
-    if query and (not has_required_numbers(query, title) or not has_required_model_phrases(query, title)):
+    if query and (
+        not has_required_numbers(query, title)
+        or not has_required_model_phrases(query, title)
+        or not condition_matches(query, title)
+    ):
         return None
     if score < min_score:
         return None
@@ -271,7 +296,11 @@ class YandexMarketProvider(MarketplaceProvider):
 
             title = clean_product_title(title_match.group(1))
             score = token_overlap_score(query, title)
-            if not has_required_numbers(query, title) or not has_required_model_phrases(query, title):
+            if (
+                not has_required_numbers(query, title)
+                or not has_required_model_phrases(query, title)
+                or not condition_matches(query, title)
+            ):
                 continue
             if score < 0.45:
                 continue
@@ -381,7 +410,11 @@ class DuckDuckGoMarketplaceProvider(MarketplaceProvider):
 
             snippet = self._extract_snippet(block)
             score = token_overlap_score(query, f"{title} {snippet}")
-            if not has_required_numbers(query, title) or not has_required_model_phrases(query, title):
+            if (
+                not has_required_numbers(query, title)
+                or not has_required_model_phrases(query, title)
+                or not condition_matches(query, title)
+            ):
                 continue
             if score < 0.18:
                 continue
