@@ -1,0 +1,12 @@
+[project]
+name = "market-price-bot"
+version = "0.1.0"
+description = "Telegram bot that compares product prices across marketplaces."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+market-price-bot = "price_bot.__main__:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
