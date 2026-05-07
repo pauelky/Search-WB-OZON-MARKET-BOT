@@ -4,11 +4,13 @@ import unittest
 
 from price_bot.text_utils import (
     clean_product_title,
+    brand_matches,
     condition_matches,
     duckduckgo_real_url,
     extract_prices_rub,
     has_required_model_phrases,
     has_required_numbers,
+    has_required_distinctive_terms,
     query_from_url_path,
     token_overlap_score,
     wildberries_product_id,
@@ -52,6 +54,21 @@ class TextUtilsTest(unittest.TestCase):
     def test_condition_matches(self) -> None:
         self.assertFalse(condition_matches("iphone 15 128gb black", "iPhone 15 128 ГБ Восстановленный"))
         self.assertTrue(condition_matches("iphone 15 восстановленный", "iPhone 15 128 ГБ Восстановленный"))
+
+    def test_has_required_distinctive_terms_with_aliases(self) -> None:
+        self.assertTrue(has_required_distinctive_terms("Dayson Фен Supersonic", "Dyson Фен Supersonic HD08"))
+        self.assertFalse(
+            has_required_distinctive_terms(
+                "Dayson Фен Supersonic",
+                "Фен для волос профессиональный с насадками",
+            )
+        )
+
+    def test_brand_matches_dyson(self) -> None:
+        self.assertTrue(brand_matches("Dayson Фен Supersonic", "Dyson Фен Supersonic HD08"))
+        self.assertTrue(brand_matches("Dayson Фен Supersonic", "Фен Dyson Supersonic HD08"))
+        self.assertFalse(brand_matches("Dayson Фен Supersonic", "Mijia Фен Supersonic для Dyson"))
+        self.assertFalse(brand_matches("Dayson Фен Supersonic", "Market369 Фен Dyson Supersonic Hd08"))
 
 
 if __name__ == "__main__":

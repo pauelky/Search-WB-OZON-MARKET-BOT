@@ -11,10 +11,12 @@ from .http_client import FetchError, HttpClient
 from .models import MarketplaceSearch, ProductCandidate
 from .text_utils import (
     clean_product_title,
+    brand_matches,
     condition_matches,
     duckduckgo_real_url,
     extract_prices_rub,
     has_required_model_phrases,
+    has_required_distinctive_terms,
     has_required_numbers,
     strip_tags,
     token_overlap_score,
@@ -182,6 +184,8 @@ def _wb_candidate_from_item(
     if query and (
         not has_required_numbers(query, title)
         or not has_required_model_phrases(query, title)
+        or not has_required_distinctive_terms(query, title)
+        or not brand_matches(query, title)
         or not condition_matches(query, title)
     ):
         return None
@@ -299,6 +303,8 @@ class YandexMarketProvider(MarketplaceProvider):
             if (
                 not has_required_numbers(query, title)
                 or not has_required_model_phrases(query, title)
+                or not has_required_distinctive_terms(query, title)
+                or not brand_matches(query, title)
                 or not condition_matches(query, title)
             ):
                 continue
@@ -413,6 +419,8 @@ class DuckDuckGoMarketplaceProvider(MarketplaceProvider):
             if (
                 not has_required_numbers(query, title)
                 or not has_required_model_phrases(query, title)
+                or not has_required_distinctive_terms(query, title)
+                or not brand_matches(query, title)
                 or not condition_matches(query, title)
             ):
                 continue
