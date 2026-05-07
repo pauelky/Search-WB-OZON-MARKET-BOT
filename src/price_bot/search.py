@@ -4,7 +4,7 @@ from .config import Config
 from .extractor import ProductQueryExtractor
 from .http_client import HttpClient
 from .models import PriceSearchResult, ProductCandidate
-from .providers import build_default_providers
+from .providers import WildberriesProvider, build_default_providers
 
 
 class PriceSearchService:
@@ -19,6 +19,10 @@ class PriceSearchService:
         all_candidates: list[ProductCandidate] = []
         warnings: list[str] = []
 
+        source_candidate = self._source_candidate(product.source_url)
+        if source_candidate:
+            all_candidates.append(source_candidate)
+
         for provider in self.providers:
             marketplace_result = provider.search(product.query, self.config.market_price_limit)
             all_candidates.extend(marketplace_result.candidates)
@@ -32,6 +36,14 @@ class PriceSearchService:
             candidates=ranked,
             warnings=warnings,
         )
+
+    def _source_candidate(self, source_url: str | None) -> ProductCandidate | None:
+        if not source_url:
+            return None
+        for provider in self.providers:
+            if isinstance(provider, WildberriesProvider):
+                return provider.product_from_url(source_url)
+        return None
 
 
 def rank_candidates(candidates: list[ProductCandidate], limit: int) -> list[ProductCandidate]:

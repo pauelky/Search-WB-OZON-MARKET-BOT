@@ -12,8 +12,11 @@ from .text_utils import (
     clean_product_title,
     duckduckgo_real_url,
     extract_prices_rub,
+    has_required_model_phrases,
+    has_required_numbers,
     strip_tags,
     token_overlap_score,
+    wildberries_product_id,
 )
 
 
@@ -74,6 +77,34 @@ class WildberriesProvider(MarketplaceProvider):
 
         return MarketplaceSearch(self.marketplace, candidates=candidates)
 
+    def product_from_url(self, url: str) -> ProductCandidate | None:
+        nm_id = wildberries_product_id(url)
+        if not nm_id:
+            return None
+        product = self._load_wb_product(nm_id)
+        if not product:
+            return None
+        return _wb_candidate_from_item(product, "", self.marketplace, min_score=0.0)
+
+    def _load_wb_product(self, nm_id: str) -> dict[str, object] | None:
+        api_url = (
+            "https://card.wb.ru/cards/v4/detail"
+            f"?appType=1&curr=rub&dest={self.config.wb_dest}&spp=30&nm={nm_id}"
+        )
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "Wildberries/6.6.0 (iPhone; iOS 17.0)",
+            "x-userid": "0",
+            "x-queryid": "market-price-bot",
+        }
+        try:
+            payload = self.http.get_json(api_url, headers=headers)
+        except FetchError:
+            return None
+
+        products = _wb_products_from_payload(payload)
+        return products[0] if products else None
+
     def _load_wb_catalog_payload(self, payload: dict[str, object], headers: dict[str, str]) -> list[dict[str, object]]:
         shard_key = payload.get("shardKey")
         query_string = payload.get("query")
@@ -101,17 +132,23 @@ class WildberriesProvider(MarketplaceProvider):
 def _wb_products_from_payload(payload: object) -> list[dict[str, object]]:
     products = []
     if isinstance(payload, dict):
-        if isinstance(payload, dict):
-            data = payload.get("data")
-            if isinstance(data, dict) and isinstance(data.get("products"), list):
-                products = data["products"]
-            search_result = payload.get("search_result")
-            if isinstance(search_result, dict) and isinstance(search_result.get("products"), list):
-                products = search_result["products"]
+        if isinstance(payload.get("products"), list):
+            products = payload["products"]
+        data = payload.get("data")
+        if isinstance(data, dict) and isinstance(data.get("products"), list):
+            products = data["products"]
+        search_result = payload.get("search_result")
+        if isinstance(search_result, dict) and isinstance(search_result.get("products"), list):
+            products = search_result["products"]
     return [item for item in products if isinstance(item, dict)]
 
 
-def _wb_candidate_from_item(item: dict[str, object], query: str, marketplace: str) -> ProductCandidate | None:
+def _wb_candidate_from_item(
+    item: dict[str, object],
+    query: str,
+    marketplace: str,
+    min_score: float = 0.2,
+) -> ProductCandidate | None:
     nm_id = item.get("id")
     name = str(item.get("name") or "").strip()
     brand = str(item.get("brand") or "").strip()
@@ -120,16 +157,23 @@ def _wb_candidate_from_item(item: dict[str, object], query: str, marketplace: st
         return None
 
     price = _wb_price(item)
-    score = token_overlap_score(query, title)
-    if score < 0.2:
+    score = token_overlap_score(query, title) if query else 1.0
+    if query and (not has_required_numbers(query, title) or not has_required_model_phrases(query, title)):
         return None
+    if score < min_score:
+        return None
+
+    quantity = item.get("totalQuantity")
+    available = price is not None
+    if isinstance(quantity, (int, float)):
+        available = quantity > 0 and price is not None
 
     return ProductCandidate(
         marketplace=marketplace,
         title=title,
         price_rub=price,
         url=f"https://www.wildberries.ru/catalog/{nm_id}/detail.aspx",
-        available=price is not None,
+        available=available,
         confidence=min(1.0, 0.35 + score),
         note="WB catalog endpoint",
     )
@@ -227,6 +271,8 @@ class YandexMarketProvider(MarketplaceProvider):
 
             title = clean_product_title(title_match.group(1))
             score = token_overlap_score(query, title)
+            if not has_required_numbers(query, title) or not has_required_model_phrases(query, title):
+                continue
             if score < 0.45:
                 continue
 
@@ -335,6 +381,8 @@ class DuckDuckGoMarketplaceProvider(MarketplaceProvider):
 
             snippet = self._extract_snippet(block)
             score = token_overlap_score(query, f"{title} {snippet}")
+            if not has_required_numbers(query, title) or not has_required_model_phrases(query, title):
+                continue
             if score < 0.18:
                 continue
 

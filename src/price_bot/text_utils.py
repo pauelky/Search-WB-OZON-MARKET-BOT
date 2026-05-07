@@ -94,6 +94,18 @@ def query_from_url_path(url: str) -> str | None:
     return None
 
 
+def wildberries_product_id(url: str) -> str | None:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    if "wildberries." not in host:
+        return None
+
+    match = re.search(r"/catalog/(\d+)(?:/|$)", parsed.path)
+    if not match:
+        return None
+    return match.group(1)
+
+
 def duckduckgo_real_url(url: str) -> str:
     if url.startswith("//"):
         url = "https:" + url
@@ -119,6 +131,29 @@ def token_overlap_score(query: str, title: str) -> float:
         return 0.0
     overlap = query_tokens & title_tokens
     return len(overlap) / len(query_tokens)
+
+
+def has_required_numbers(query: str, title: str) -> bool:
+    query_numbers = set(re.findall(r"\d+", query.lower()))
+    if not query_numbers:
+        return True
+    title_numbers = set(re.findall(r"\d+", title.lower()))
+    return query_numbers.issubset(title_numbers)
+
+
+def has_required_model_phrases(query: str, title: str) -> bool:
+    query_norm = _phrase_norm(query)
+    title_norm = _phrase_norm(title)
+    for phrase in ("pro max",):
+        if phrase in query_norm and phrase not in title_norm:
+            return False
+    return True
+
+
+def _phrase_norm(value: str) -> str:
+    value = value.lower()
+    value = re.sub(r"[^a-zа-я0-9]+", " ", value)
+    return " ".join(value.split())
 
 
 def extract_prices_rub(text: str) -> list[int]:
